@@ -1,11 +1,5 @@
 local soundfile_base = "/SOUNDS/en/fm_"
 
--- Internal
-local last_flight_mode = 0
-local last_flight_mode_play = 0
-local received_telemetry = false
-local first_telemetry = -1
-
 local function init()
 	-- Prepare a2 for hdop
 	local a1t = model.getTelemetryChannel(1)
@@ -18,63 +12,23 @@ local function init()
 	end
 end
 
-local function nextRepeatFlightmode(mode)
-  if last_flight_mode_play < 1 then
-	return 0
-  end
-  -- Auto or guided (every 15 sec)
-  if mode == 3 or mode == 4  then
-	return last_flight_mode_play + 15*100
-  -- Return to launch or land (every 5 sec)
-  elseif mode == 6 or mode == 9 then
-    return last_flight_mode_play + 5*100
-  end
-  -- All others (every hour)
-   return last_flight_mode_play + 3600*100
-end
-
-local function playFlightmode()
-  if received_telemetry == false 
-  then
-    local rssi = getValue("rssi")
-    if rssi < 1 
-	then
-	  return
-	end
-	if first_telemetry < 0 
-	then
-		first_telemetry = getTime()
-	end
-	if (first_telemetry + 150) > getTime()
-	then
-		return
-	end
-	received_telemetry = true
-  end
-  local mode=getValue("fuel")
-  if (mode ~= last_flight_mode) or (nextRepeatFlightmode(mode) < getTime()) 
-  then
-	last_flight_mode_play = getTime()
-	playFile(soundfile_base  .. mode .. ".wav")
-	last_flight_mode = mode
-  end
-end
-
 local function run_func()
- playFlightmode()
 end  
 
+function getApmFlightmodeNumber()
+	return getValue("fuel")
+end
 
 function getApmFlightmodeText()
-	local mode = getValue("fuel")
+  local mode = getApmFlightmodeNumber()
   if     mode == 0  then return "Stabilize"
-  elseif mode == 1  then return  "Acro"
-  elseif mode == 2  then return  "Altitude Hold"
-  elseif mode == 3  then return  "Auto"
-  elseif mode == 4  then return  "Guided"
-  elseif mode == 5  then return  "Loiter"
-  elseif mode == 6  then return  "Return to launch"
-  elseif mode == 7  then return  "Circle"
+  elseif mode == 1  then return "Acro"
+  elseif mode == 2  then return "Altitude Hold"
+  elseif mode == 3  then return "Auto"
+  elseif mode == 4  then return "Guided"
+  elseif mode == 5  then return "Loiter"
+  elseif mode == 6  then return "Return to launch"
+  elseif mode == 7  then return "Circle"
   elseif mode == 9  then return "Land"
   elseif mode == 10 then return "Optical Flow Loiter"
   elseif mode == 11 then return "Drift"
@@ -102,4 +56,30 @@ end
 function getApmArmed()
 	return getValue("temp2") > 0
 end
+
+-- The heading to pilot home position - relative to apm position
+function getApmHeadingHome()
+  local pilotlat = getValue("pilot-latitude")
+  local pilotlon = getValue("pilot-longitude")
+  local curlat = getValue("latitude")
+  local curlon = getValue("longitude")
+  
+  if pilotlat~=0 and curlat~=0 and pilotlon~=0 and curlon~=0 
+  then 
+    local z1 = math.sin(math.rad(curlon) - math.rad(pilotlon)) * math.cos(math.rad(curlat))
+    local z2 = math.cos(math.rad(pilotlat)) * math.sin(math.rad(curlat)) - math.sin(math.rad(pilotlat)) * math.cos(math.rad(curlat)) * math.cos(math.rad(curlon) - math.rad(pilotlon))
+
+    local head_from = (math.deg(math.atan2(z1, z2)) + 360)%360
+	local head_to = (head_from+180)%360
+	return head_to
+  end
+  return 0
+end
+
+-- The heading to pilot home position relative to the current heading.
+function getApmHeadingHomeRelative()
+	local tmp = getApmHeadingHome() - getValue("heading")
+	return (tmp +360)%360
+end
+
 return {init=init, run=run_func}
