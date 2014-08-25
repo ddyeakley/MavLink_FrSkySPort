@@ -1,6 +1,7 @@
 local soundfile_base = "/SOUNDS/en/fm_"
 
 local apm_active_warning = 0
+local apm_active_warning_textnr = 0
 local apm_active_warning_timeout = 0
 
 local outputs = {"armd"}
@@ -19,29 +20,106 @@ end
 
 local function decodeApmWarning(severity)
 	-- +10 is added to mavlink-value so 0 represents no warning
-	if      severity == 0 then return ""
-	elseif severity == 10 then return "Emergency"
-	elseif severity == 11 then return "Alert"
-	elseif severity == 12 then return "Critical"
-	elseif severity == 13 then return "Error"
-	elseif severity == 14 then return "Warning"
-	elseif severity == 15 then return "Notice"
-	elseif severity == 16 then return "Info"
-	elseif severity == 17 then return "Debug"
+	if     severity == 0 then return ""
+	elseif severity == 1 then return "Emergency"
+	elseif severity == 2 then return "Alert"
+	elseif severity == 3 then return "Critical"
+	elseif severity == 4 then return "Error"
+	elseif severity == 5 then return "Warning"
+	elseif severity == 6 then return "Notice"
+	elseif severity == 7 then return "Info"
+	elseif severity == 8 then return "Debug"
 	end
 	return "Unknown"
 end
 
-function getApmActiveWarning()
-	if apm_active_warning_timeout < getTime()
-	then
-		apm_active_warning = 0
+local function decodeApmStatusText(textnr)
+	if     textnr == 1  then return "PreArm: RC not calibrated"
+	elseif textnr == 2  then return "PreArm: RC not calibrated"
+	elseif textnr == 3  then return "PreArm: Baro not healthy"
+	elseif textnr == 4  then return "PreArm: Alt disparity"
+	elseif textnr == 5  then return "PreArm: Compass not healthy"
+	elseif textnr == 6  then return "PreArm: Compass not calibrated"
+	elseif textnr == 7  then return "PreArm: Compass offsets too high"
+	elseif textnr == 8  then return "PreArm: Check mag field"
+	elseif textnr == 9  then return "PreArm: INS not calibrated"
+	elseif textnr == 10 then return "PreArm: INS not healthy"
+	elseif textnr == 11 then return "PreArm: Check Board Voltage"
+	elseif textnr == 12 then return "PreArm: Ch7&Ch8 Opt cannot be same"
+	elseif textnr == 13 then return "PreArm: Check FS_THR_VALUE"
+	elseif textnr == 14 then return "PreArm: Check ANGLE_MAX"
+	elseif textnr == 15 then return "PreArm: ACRO_BAL_ROLL/PITCH"
+	elseif textnr == 16 then return "PreArm: GPS Glitch"
+	elseif textnr == 17 then return "PreArm: Need 3D Fix"
+	elseif textnr == 18 then return "PreArm: Bad Velocity"
+	elseif textnr == 19 then return "PreArm: High GPS HDOP"
+	
+	elseif textnr == 20 then return "Arm: Alt disparity"
+	elseif textnr == 21 then return "Arm: Thr below FS"
+	elseif textnr == 22 then return "Arm: Leaning"
+	elseif textnr == 23 then return "Arm: Safety Switch"
+	
+	elseif textnr == 24 then return "AutoTune: Started"
+	elseif textnr == 25 then return "AutoTune: Stopped"
+	elseif textnr == 26 then return "AutoTune: Success"
+	elseif textnr == 27 then return "AutoTune: Failed"
+
+	elseif textnr == 28 then return "Crash: Disarming"
+	elseif textnr == 29 then return "Parachute: Released!"
+	elseif textnr == 30 then return "Parachute: Too Low"
+	elseif textnr == 31 then return "EKF variance"
+	elseif textnr == 32 then return "Low Battery!"
+	elseif textnr == 33 then return "Lost GPS!"
+	elseif textnr == 34 then return "Trim saved"
+	end
+	return ""
+end
+
+function getApmActiveStatusSeverity()
+	if isApmActiveStatus() == false
+	then 
+		return ""
 	end
 	return decodeApmWarning(apm_active_warning)
 end
 
+function getApmActiveStatusText()
+	if isApmActiveStatus() == false
+	then 
+		return ""
+	end
+	return decodeApmStatusText(apm_active_warning_textnr)
+end
+
+function getApmActiveWarnings(includeUnknown)
+	local severity = getApmActiveStatusSeverity()
+	local text = getApmActiveStatusText()
+	
+	if includeUnknown == false or text ~= "" 
+	then 
+		return text
+	end
+	
+	if severity == "" 
+	then 
+		return ""
+	end
+	
+	return severity..apm_active_warning_textnr;
+end
+
+function isApmActiveStatus()
+	if apm_active_warning_timeout < getTime()
+	then
+		apm_active_warning = 0
+		apm_active_warning_textnr = 0
+		return false
+	end
+	return true
+end
+
 function getApmFlightmodeNumber()
-	return getValue("fuel")
+	return getValue(208) -- Fuel
 end
 
 function getApmFlightmodeText()
@@ -65,22 +143,23 @@ function getApmFlightmodeText()
 end
 
 function getApmGpsHdop()
-	return getValue("a2")*10
+	return getValue(203)/10 -- A2
 end 
 
 function getApmGpsSats()
-  local telem_t1 = getValue("temp1") -- Temp1
+  local telem_t1 = getValue(209) -- Temp1
   return (telem_t1 - (telem_t1%10))/10
 end
 
 function getApmGpsLock()
-  local telem_t1 = getValue("temp1") -- Temp1
+  local telem_t1 = getValue(209) -- Temp1
   return  telem_t1%10
 end
 
 function getApmArmed()
-	return getValue("temp2")%256 > 0
+	return getValue(210)%256 > 0 -- Temp2
 end
+
 
 -- The heading to pilot home position - relative to apm position
 function getApmHeadingHome()
@@ -103,7 +182,7 @@ end
 
 -- The heading to pilot home position relative to the current heading.
 function getApmHeadingHomeRelative()
-	local tmp = getApmHeadingHome() - getValue("heading")
+	local tmp = getApmHeadingHome() - getValue(223) -- Heading
 	return (tmp +360)%360
 end
 
@@ -114,15 +193,20 @@ end
 
 local function run_func()
 	-- Handle warning messages from mavlink
-	local t2 = getValue("temp2")
-	t2 = (t2 - (t2%256))/256
-	if(t2 > 0)
+	local t2 = getValue(210) -- Temp2
+	local armed = t2%0x02;
+	t2 = (t2-armed)/0x02;
+	local status_severity = t2%0x10;
+	t2 = (t2-status_severity)/0x10;
+	local status_textnr = t2%0x400;
+	if(status_severity > 0)
 	then
-		if apm_active_warning ~= t2 and t2 ~= 0
+		if apm_active_warning ~= status_severity and status_severity ~= 0
 		then
 			apm_active_warning_timeout = getWarningTimeout()
 		end
-		apm_active_warning = t2
+		apm_active_warning = status_severity
+		apm_active_warning_textnr = status_textnr
 	end
 
 	-- Calculate return value (armed)

@@ -12,10 +12,18 @@ end
 
 local function run(event)
 
--- Battery gauge
-  local telem_mah = getValue("consumption")
-  lcd.drawGauge(1, 55, 90, 8, capacity_max - telem_mah, capacity_max)
-  lcd.drawText(90+4, 55, telem_mah.."mAh", 0)
+  if getApmActiveStatusSeverity() ~= ""
+  then
+	  lcd.drawText(1, 55, getApmActiveWarnings(false), 0)
+  else
+	  -- Battery gauge
+	  local telem_mah = getValue("consumption")
+	  lcd.drawGauge(1, 55, 90, 8, capacity_max - telem_mah, capacity_max)
+	  lcd.drawText(90+4, 55, telem_mah.."mAh", 0)
+  end
+  
+    lcd.drawText(150, 55, getValue("distance").."m", 0)
+
 
 -- Model name && status
   lcd.drawText(2,1, model.getInfo().name, MIDSIZE)
@@ -27,15 +35,20 @@ local function run(event)
   end
   
  -- gps status
+  local gpsString
   if getApmGpsLock() >= 3.0
   then
-	lcd.drawText(lcd.getLastPos()+3, 1, "GPS: 3D sat "..getApmGpsSats(), 0)
+	gpsString = "3D GPS: "..getApmGpsHdop()
   else
-	lcd.drawText(lcd.getLastPos()+3, 1, "No lock("..getApmGpsSats().."sat)", BLINK)
+	gpsString = "no GPS: "..getApmGpsHdop()
   end
-  lcd.drawText(120, 15, "Hdop: ", 0)
-  lcd.drawNumber(lcd.getLastPos()+3, 15, getApmGpsHdop(), 0+PREC2+LEFT )
---  lcd.drawText(120,15, getSounds(), 0)
+  if getApmGpsHdop() <= 2.0
+  then
+	lcd.drawText(lcd.getLastPos()+3, 1, gpsString, 0)
+  else
+	lcd.drawText(lcd.getLastPos()+3, 1, gpsString, BLINK)
+  end
+
 -- Line 2
   lcd.drawText(1, 15, getApmFlightmodeText(), 0);
 -- Line 3
@@ -54,10 +67,8 @@ local function run(event)
 -- Home position
   local relativeHeadingHome = getApmHeadingHomeRelative()
   local integHead, fracHead = math.modf(relativeHeadingHome/22.5+.5)
-  lcd.drawPixmap(190,42,"/BMP/arrow"..(integHead%16)..".bmp")
+  lcd.drawPixmap(190,42,"/SCRIPTS/BMP/arrow"..(integHead%16)..".bmp")
   lcd.drawText(150, 45, "To Home", 0)
-  lcd.drawText(150, 55, getValue("distance").."m", 0)
-  lcd.drawText(150,35, getApmActiveWarning(), 0)
 end
 
 return { init=init, run=run, background=background}

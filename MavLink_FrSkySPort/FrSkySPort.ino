@@ -174,12 +174,16 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         }
         break;
       case 3:
+      // Note: This is sending GPS Speed now
         if(ap_fixtype==3) {
           //            FrSkySPort_SendPackage(FR_ID_SPEED,ap_groundspeed *20 );  // from GPS converted to km/h
           FrSkySPort_SendPackage(FR_ID_SPEED,ap_gps_speed *20 );  // from GPS converted to km/h
         }
         break;
       case 4:
+         // Note: This is sending Course Over Ground from GPS as Heading
+         // before we were sending this: FrSkySPort_SendPackage(FR_ID_HEADING,ap_cog * 100); 
+
         FrSkySPort_SendPackage(FR_ID_GPS_COURSE, ap_heading * 100);   // 10000 = 100 deg
         break;
       }
@@ -196,7 +200,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
   case 0xC6:
     switch(nextDefault)
     {
-    case 0:        // Sends the analog value from input A0 on Teensy 3.1
+    case 0:        // Note: We are using A2 - previously reported analog voltage when connected to Teensy - as Hdop
       FrSkySPort_SendPackage(FR_ID_ADC2, ap_gps_hdop);                  
       break;       
     case 1:
@@ -213,18 +217,25 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
       break; 
     case 5:
       {
-        uint32_t ap_status_value = 0;
+        // 16 bit value: 
+        // bit 1: armed
+        // bit 2-5: severity +1 (0 means no message)
+        // bit 6-15: number representing a specific text
+        uint32_t ap_status_value = ap_base_mode&0x01;
+        // If we have a message-text to report (we send it multiple times to make sure it arrives even on telemetry glitches)
         if(ap_status_send_count > 0)
         {
-          ap_status_value = (ap_status_severity+10) & 0x0F;
+          // Add bits 2-15
+          ap_status_value |= (((ap_status_severity+1)&0x0F)<<1) |((ap_status_encodedText&0x3FF)<<5);
           ap_status_send_count--;
+          if(ap_status_send_count == 0)
+          {
+             // Reset severity and text-message after we have sent the message
+             ap_status_severity = 0; 
+             ap_status_encodedText = 0;
+          }          
         }
-        if(ap_status_send_count == 0)
-        {
-           ap_status_severity = 255; 
-        }
-        FrSkySPort_SendPackage(FR_ID_T2, ((ap_status_value&0xFF)<<8) | (ap_base_mode & 0x0F)); 
-
+        FrSkySPort_SendPackage(FR_ID_T2, ap_status_value); 
       }
       break;
     case 6:
