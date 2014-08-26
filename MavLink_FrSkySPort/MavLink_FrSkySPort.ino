@@ -68,19 +68,19 @@ AccZ            ( Z Axis average vibration m/s?)
 //#define DEBUG_FRSKY_SENSOR_REQUEST
 
 //#define DEBUG_AVERAGE_VOLTAGE
-//#define DEBUG_PARSE_STATUS_TEXT
+#define DEBUG_PARSE_STATUS_TEXT
 
 // ******************************************
 // Message #0  HEARTHBEAT 
 uint8_t    ap_type = 0;
 uint8_t    ap_autopilot = 0;
 uint8_t    ap_base_mode = 0;
-uint32_t   ap_custom_mode = 0;
+int32_t    ap_custom_mode = -1;
 uint8_t    ap_system_status = 0;
 uint8_t    ap_mavlink_version = 0;
 
 // Message # 1  SYS_STATUS 
-uint16_t  ap_voltage_battery = 0;       // 1000 = 1V
+uint16_t   ap_voltage_battery = 0;       // 1000 = 1V
 int16_t    ap_current_battery = 0;      //  10 = 1A
 //int8_t    ap_battery_remaining = 0;   // Remaining battery energy: (0%: 0, 100%: 100), -1: autopilot estimate the remaining battery
 
@@ -124,10 +124,9 @@ uint32_t ap_yaw_speed = 0;     //Yaw angular speed (rad/s)
 
 
 // Message #253 MAVLINK_MSG_ID_STATUSTEXT
-uint8_t   ap_severity = 0;
-uint8_t   ap_status_severity = 255;
-uint8_t   ap_status_send_count = 0;
-uint8_t   ap_status_encodedText = 0;
+uint16_t   ap_status_severity = 255;
+uint16_t   ap_status_send_count = 0;
+uint16_t   ap_status_text_id = 0;
 mavlink_statustext_t statustext;
 
 /*
@@ -135,7 +134,7 @@ mavlink_statustext_t statustext;
   MAV_SEVERITY_EMERGENCY=0, System is unusable. This is a "panic" condition.
   MAV_SEVERITY_ALERT=1, Action should be taken immediately. Indicates error in non-critical systems.
   MAV_SEVERITY_CRITICAL=2, Action must be taken immediately. Indicates failure in a primary system.
-  MAV_SEVERITY_ERROR=3, Indicates an error in secondary/redundant systems. | */
+  MAV_SEVERITY_ERROR=3, Indicates an error in secondary/redundant systems. | 
   MAV_SEVERITY_WARNING=4, Indicates about a possible future error if this is not resolved within a given timeframe. Example would be a low battery warning.
   MAV_SEVERITY_NOTICE=5, An unusual event has occured, though not an error condition. This should be investigated for the root cause.
   MAV_SEVERITY_INFO=6, Normal operational messages. Useful for logging. No action is required for these messages.
@@ -259,7 +258,6 @@ void _MavLink_receive() {
         ap_status_severity = statustext.severity;
         ap_status_send_count = 5;
         parseStatusText(statustext.severity, statustext.text);
-        ap_severity = (statustext.severity);
         
 #ifdef DEBUG_STATUS
         debugSerial.print(millis());

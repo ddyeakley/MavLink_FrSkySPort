@@ -59,6 +59,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
   uint8_t offset;
   switch(sensorId)
   {
+  #ifdef SENSOR_ID_FLVSS
   case SENSOR_ID_FLVSS:
     {
       printDebugPackageSend("FLVSS", nextFLVSS+1, 3);
@@ -106,6 +107,8 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         nextFLVSS=0;
     }
     break;
+  #endif
+  #ifdef SENSOR_ID_VARIO
   case SENSOR_ID_VARIO:
     {
       printDebugPackageSend("VARIO", nextVARIO+1, 2);
@@ -122,6 +125,8 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         nextVARIO = 0;
     }
     break;
+  #endif
+  #ifdef SENSOR_ID_FAS
   case SENSOR_ID_FAS:
     {
       printDebugPackageSend("FAS", nextFAS+1, 2);
@@ -145,6 +150,8 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         nextFAS = 0;
     }
     break;
+  #endif
+  #ifdef SENSOR_ID_GPS
   case SENSOR_ID_GPS:
     {
       printDebugPackageSend("GPS", nextGPS+1, 5);
@@ -191,11 +198,14 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         nextGPS = 0;
     }
     break;    
+  #endif
+  #ifdef SENSOR_ID_RPM
   case SENSOR_ID_RPM:
     printDebugPackageSend("RPM", 1, 1);
     FrSkySPort_SendPackage(FR_ID_RPM,ap_throttle * 2);   //  * 2 if number of blades on Taranis is set to 2
     break;
     // Since I don't know the app-id for these values, I just use these two "random"
+  #endif
   case 0x45:
   case 0xC6:
     switch(nextDefault)
@@ -223,23 +233,27 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         // bit 6-15: number representing a specific text
         uint32_t ap_status_value = ap_base_mode&0x01;
         // If we have a message-text to report (we send it multiple times to make sure it arrives even on telemetry glitches)
-        if(ap_status_send_count > 0)
+        if(ap_status_send_count > 0 && ap_status_text_id > 0)
         {
           // Add bits 2-15
-          ap_status_value |= (((ap_status_severity+1)&0x0F)<<1) |((ap_status_encodedText&0x3FF)<<5);
+          ap_status_value |= (((ap_status_severity+1)&0x0F)<<1) |((ap_status_text_id&0x3FF)<<5);
           ap_status_send_count--;
           if(ap_status_send_count == 0)
           {
              // Reset severity and text-message after we have sent the message
              ap_status_severity = 0; 
-             ap_status_encodedText = 0;
+             ap_status_text_id = 0;
           }          
         }
         FrSkySPort_SendPackage(FR_ID_T2, ap_status_value); 
       }
       break;
     case 6:
-      FrSkySPort_SendPackage(FR_ID_FUEL,ap_custom_mode); 
+      // Don't send until we have received a value through mavlink
+      if(ap_custom_mode >= 0)
+      {
+        FrSkySPort_SendPackage(FR_ID_FUEL,ap_custom_mode); 
+      }
       break;      
     }
     if(++nextDefault > 6)
