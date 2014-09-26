@@ -17,6 +17,11 @@ uint8_t nextFAS = 0;
 uint8_t nextVARIO = 0;
 uint8_t nextGPS = 0;
 uint8_t nextDefault = 0;
+
+// Scale factor for roll/pitch:
+// We need to scale down 360 deg to fit when max value is 256, and 256 equals 362 deg
+float scalefactor = 360.0/((362.0/360.0)*256.0);
+
 // ***********************************************************************
 void FrSkySPort_Init(void)  {
   _FrSkySPort_Serial.begin(_FrSkySPort_BAUD);
@@ -130,6 +135,9 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
   case SENSOR_ID_FAS:
     {
       printDebugPackageSend("FAS", nextFAS+1, 2);
+      // Use average of atleast 2 samples
+      if(currentCount < 2)
+        return;
       if(nextFAS == 0)
       {
         sendValueFASVoltage = readAndResetAverageVoltage();
@@ -137,6 +145,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
       }
       if(sendValueFASVoltage < 1)
         break;
+      
       switch(nextFAS)
       {
       case 0:
@@ -202,7 +211,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
   #ifdef SENSOR_ID_RPM
   case SENSOR_ID_RPM:
     printDebugPackageSend("RPM", 1, 1);
-    FrSkySPort_SendPackage(FR_ID_RPM,ap_throttle * 2);   //  * 2 if number of blades on Taranis is set to 2
+    FrSkySPort_SendPackage(FR_ID_RPM,ap_throttle * 200+ap_battery_remaining*2);   //  * 2 if number of blades on Taranis is set to 2 + First 4 digits reserved for battery remaining in %
     break;
     // Since I don't know the app-id for these values, I just use these two "random"
   #endif
@@ -226,6 +235,12 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
       FrSkySPort_SendPackage(FR_ID_T1,gps_status); 
       break; 
     case 5:
+      FrSkySPort_SendPackage(FR_ID_A3_FIRST, handle_A2_A3_value((ap_roll_angle+180)/scalefactor));
+      break;
+    case 6:
+      FrSkySPort_SendPackage(FR_ID_A4_FIRST, handle_A2_A3_value((ap_pitch_angle+180)/scalefactor));
+      break;
+    case 7:
       {
         // 16 bit value: 
         // bit 1: armed
@@ -248,7 +263,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
         FrSkySPort_SendPackage(FR_ID_T2, ap_status_value); 
       }
       break;
-    case 6:
+    case 8:
       // Don't send until we have received a value through mavlink
       if(ap_custom_mode >= 0)
       {
@@ -256,7 +271,7 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
       }
       break;      
     }
-    if(++nextDefault > 6)
+    if(++nextDefault > 8)
       nextDefault = 0;
   default: 
 #ifdef DEBUG_FRSKY_SENSOR_REQUEST
@@ -267,6 +282,11 @@ void FrSkySPort_ProcessSensorRequest(uint8_t sensorId)
 #endif
     ;
   }
+}
+
+uint32_t handle_A2_A3_value(uint32_t value)
+{
+  return (value *330-165)/0xFF;
 }
 
 // ***********************************************************************
@@ -289,16 +309,30 @@ void printDebugPackageSend(char* pkg_name, uint8_t pkg_nr, uint8_t pkg_max)
 // ***********************************************************************
 void FrSkySPort_SendByte(uint8_t byte) {
 
-  _FrSkySPort_Serial.write(byte);
+  if(byte == 0x7E)
+  {
+    _FrSkySPort_Serial.write(0x7D);
+    _FrSkySPort_Serial.write(0x5E);
+  }
+  else if(byte == 0x7D)
+  {
+    _FrSkySPort_Serial.write(0x7D);
+    _FrSkySPort_Serial.write(0x5D);
+  }
+  else
+  {
+    _FrSkySPort_Serial.write(byte);
+  }
+  FrSkySPort_UpdateCRC(byte);
+}
 
-  // CRC update
+void FrSkySPort_UpdateCRC(uint8_t byte)
+{
+   // CRC update
   crc += byte;         //0-1FF
   crc += crc >> 8;   //0-100
   crc &= 0x00ff;
-  crc += crc >> 8;   //0-0FF
-  crc &= 0x00ff;
 }
-
 
 // ***********************************************************************
 void FrSkySPort_SendCrc() {
